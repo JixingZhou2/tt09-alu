@@ -26,16 +26,17 @@ async def test_project(dut):
     dut._log.info("Test project behavior")
 
 
-    TEST_CASE_COUNT = 100
+    TEST_CASE_COUNT = 10000
 
     # Store expected results for each test case
     expected_results = []
     actual_results = []
+    previous_result = []
 
     for i in range(TEST_CASE_COUNT):
         # Randomize input values
         ui_in = random.randint(0, 255)
-        uio_in = (random.randint(0, 255))&0xfe
+        uio_in = random.randint(0, 255)
         dut.ui_in.value = ui_in
         dut.uio_in.value = uio_in
 
@@ -44,7 +45,7 @@ async def test_project(dut):
         b = ui_in & 0xF
         c = (uio_in >> 4) & 0x3
         opcode = (uio_in >> 2) & 0x3
-        inmode = (uio_in) & 0x2
+        inmode = (uio_in) & 0x3
 
         # Compute expected result
         if opcode == 0b00:
@@ -52,6 +53,16 @@ async def test_project(dut):
                 expected_result = a * (b + c)
             elif inmode == 0b10:
                 expected_result = a * ((c << 4) | b)
+            elif inmode == 0b01:
+                if i !=0:
+                    expected_result = previous_result[i-1] * (b + c)
+                else:
+                    expected_result = 0 * (b + c) + 1
+            elif inmode == 0b11:
+                if i !=0:
+                    expected_result = previous_result[i-1] * ((c << 4) | b)
+                else:
+                    expected_result = 0 * ((c << 4) | b) + 1
             else:
                 expected_result = 0
         elif opcode == 0b01:
@@ -59,6 +70,16 @@ async def test_project(dut):
                 expected_result = a + b + c
             elif inmode == 0b10:
                 expected_result = a + ((c << 4) | b)
+            elif inmode == 0b01:
+                if i !=0:
+                    expected_result = previous_result[i-1] + b + c
+                else:
+                    expected_result = 0 + b + c
+            elif inmode == 0b11:
+                if i !=0:
+                    expected_result = previous_result[i-1] + ((c << 4) | b)
+                else:
+                    expected_result = 0 + ((c << 4) | b)
             else:
                 expected_result = 0
         elif opcode == 0b10:
@@ -66,6 +87,16 @@ async def test_project(dut):
                 expected_result = (b + c - a) & 0x3FF
             elif inmode == 0b10:
                 expected_result = (((c << 4) | b) - a) & 0x3FF
+            elif inmode == 0b01:
+                if i !=0:
+                    expected_result = (b + c - previous_result[i-1]) & 0x3FF
+                else:
+                    expected_result = (b + c - 0) & 0x3FF
+            elif inmode == 0b11:
+                if i !=0:
+                    expected_result = (((c << 4) | b) - previous_result[i-1]) & 0x3FF
+                else:
+                    expected_result = (((c << 4) | b) - 0) & 0x3FF
             else:
                 expected_result = 0
         elif opcode == 0b11:
@@ -73,6 +104,16 @@ async def test_project(dut):
                 expected_result = a ^ (b + c)
             elif inmode == 0b10:
                 expected_result = a ^ ((c << 4) | b)
+            elif inmode == 0b01:
+                if i !=0:
+                    expected_result = previous_result[i-1] ^ (b + c)
+                else:
+                    expected_result = 0 ^ (b + c)
+            elif inmode == 0b11:
+                if i !=0:
+                    expected_result = previous_result[i-1] ^ ((c << 4) | b)
+                else:
+                    expected_result = 0 ^ ((c << 4) | b)
             else:
                 expected_result = 0
         else:
@@ -83,6 +124,7 @@ async def test_project(dut):
         # Append actual results
         dut_result = int((int(dut.uio_out.value) << 2 & 0x300)|(dut.uo_out.value)&0xff)
 
+        previous_result.append(expected_result & 0xf)
         # Store the expected result for later verification
         expected_results.append((i + 1, a, b, c, opcode, inmode, expected_result))
         if i > 3:
